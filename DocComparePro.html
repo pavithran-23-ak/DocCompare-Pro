@@ -1,0 +1,1843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocCompare Pro</title>
+
+  <!-- Tailwind CSS CDN (layout only – the editors have their own rich-text styles below) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Mammoth.js for Word (.docx) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- PDF.js for PDF (.pdf) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* ------------------------------------------------------------------
+       RICH TEXT STYLES  (shared by the two editors and the diff outputs)
+       Tailwind's reset removes bullets, heading sizes, sub/sup offsets,
+       etc. – everything is restored here so pasted content looks exactly
+       like the source and measures correctly.
+       ------------------------------------------------------------------ */
+    .rich {
+      white-space: pre-wrap;           /* keep every space, tab and line break */
+      overflow-wrap: anywhere;
+      tab-size: 4;
+      line-height: 1.55;
+      font-size: 14px;
+      text-align: left;
+      color: #1e293b;
+    }
+    .rich p, .rich div { margin: 0; }
+    .rich b, .rich strong { font-weight: 700; }
+    .rich i, .rich em { font-style: italic; }
+    .rich u { text-decoration: underline; }
+    .rich s, .rich strike, .rich del { text-decoration: line-through; }
+    .rich sub, .rich sup { font-size: 0.75em; line-height: 0; position: relative; vertical-align: baseline; }
+    .rich sup { top: -0.45em; vertical-align: baseline; }
+    .rich sub { bottom: -0.25em; vertical-align: baseline; }
+    .rich h1, .rich h2, .rich h3, .rich h4, .rich h5, .rich h6 { font-weight: 700; margin: 0; }
+    .rich h1 { font-size: 2em; } .rich h2 { font-size: 1.5em; } .rich h3 { font-size: 1.17em; }
+    .rich h4 { font-size: 1em; } .rich h5 { font-size: .83em; } .rich h6 { font-size: .67em; }
+    .rich ul, .rich ol { margin: 0; padding-left: 1.9em; }
+    .rich ul { list-style: disc outside; }
+    .rich ul ul { list-style: circle outside; }
+    .rich ul ul ul { list-style: square outside; }
+    .rich ol { list-style: decimal outside; }
+    .rich ol[type="a"] { list-style-type: lower-alpha; } .rich ol[type="A"] { list-style-type: upper-alpha; }
+    .rich ol[type="i"] { list-style-type: lower-roman; } .rich ol[type="I"] { list-style-type: upper-roman; }
+    .rich li { display: list-item; }
+    .rich table { border-collapse: collapse; margin: 4px 0; }
+    .rich td, .rich th { border: 1px solid #cbd5e1; padding: 2px 8px; vertical-align: top; }
+    .rich th { font-weight: 700; }
+    .rich blockquote { margin: 0; }
+    .rich hr { border: 0; border-top: 1px solid #cbd5e1; margin: 6px 0; }
+
+    .editor-pane { min-height: 300px; max-height: 480px; outline: none; }
+    .editor-pane.is-empty::before {
+      content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; white-space: normal;
+    }
+    .editor-pane.drag { background: #eef2ff; }
+
+    /* Diff view tokens */
+    .diff-ins { background:#dcfce7; color:#15803d; border-bottom:2px solid #22c55e; border-radius:2px; padding:1px 2px; cursor:pointer; }
+    .diff-del { background:#fee2e2; color:#b91c1c; text-decoration:line-through; border-radius:2px; padding:1px 2px; cursor:pointer; }
+    .diff-style { background:#fef3c7; color:#b45309; border-bottom:2px dashed #f59e0b; border-radius:2px; padding:1px 2px; cursor:pointer; }
+    .diff-script { background:#ccfbf1; color:#0f766e; border-bottom:2px dashed #14b8a6; border-radius:2px; padding:1px 2px; cursor:pointer; }
+    .diff-case { background:#f3e8ff; color:#7e22ce; border-bottom:2px dotted #a855f7; border-radius:2px; padding:1px 2px; cursor:pointer; }
+    .gap-mark { background:#e0f2fe; color:#0369a1; border-radius:2px; font-family:'JetBrains Mono',monospace; font-size:.85em; cursor:pointer; }
+    .diff-box { max-height: 560px; overflow: auto; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 tracking-tight leading-tight">DocCompare Pro</h1>
+          <p class="text-xs text-slate-500">Rich Text &amp; PDF Discrepancy Analysis Engine</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button id="loadSampleBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition">Load Sample</button>
+        <button id="clearAllBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-rose-600 hover:bg-rose-50 transition">Clear Both</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Settings -->
+    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600">
+        <span class="text-slate-400 font-semibold uppercase tracking-wider">Detect:</span>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkCase" checked class="text-indigo-600 rounded"><span>Case</span></label>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkFontSize" checked class="text-indigo-600 rounded"><span>Font Size</span></label>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkFormatting" checked class="text-indigo-600 rounded"><span>Bold / Italic / Underline / Strike</span></label>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkScripts" checked class="text-indigo-600 rounded"><span>Sub / Superscript</span></label>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkSpacing" checked class="text-indigo-600 rounded"><span>Spacing</span></label>
+        <label class="flex items-center space-x-1.5 cursor-pointer"><input type="checkbox" id="checkLineBreaks" checked class="text-indigo-600 rounded"><span>Line Breaks</span></label>
+      </div>
+    </div>
+
+    <!-- Dual panes -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- Panel 1 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition">
+        <div class="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="font-bold text-xs uppercase tracking-wider text-slate-800">1. Original Document</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button id="clear1" class="text-xs font-medium text-slate-600 hover:text-rose-600 px-2 py-1 rounded hover:bg-slate-200 transition">Clear</button>
+            <label class="cursor-pointer inline-flex items-center space-x-1.5 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg border border-indigo-200 transition shadow-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              <span>Open File</span>
+              <input type="file" id="fileInput1" accept=".pdf,.docx,.txt,.html,.htm" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <div id="editor1" contenteditable="true" spellcheck="false" class="rich editor-pane is-empty p-4 overflow-y-auto" data-placeholder="Paste from Word / web / PDF, drop a file here, or click 'Open File'..."></div>
+
+        <div id="pdfHint1" class="hidden bg-amber-50 border-t border-amber-200 px-4 py-2 text-xs text-amber-900 flex flex-wrap items-center gap-2">
+          <span id="pdfHintMsg1" class="flex-1 min-w-[12rem]">Plain text pasted – PDF viewers don't copy bold, italic or sizes.</span>
+          <button id="pdfHintBtn1" class="font-semibold px-2.5 py-1 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition">Restore formatting from PDF…</button>
+          <button id="pdfHintClose1" class="font-bold text-amber-700 hover:text-amber-900" title="Dismiss">✕</button>
+        </div>
+        <input type="file" id="pdfRestoreInput1" accept=".pdf" class="hidden">
+
+        <div class="bg-slate-50 px-4 py-2 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center gap-2">
+          <div class="space-x-3 whitespace-nowrap">
+            <span>Chars: <strong id="chars1" class="text-slate-700">0</strong></span>
+            <span>Words: <strong id="words1" class="text-slate-700">0</strong></span>
+          </div>
+          <button id="restorePdf1" class="text-amber-700 hover:text-amber-900 font-medium" title="Pick the PDF you copied from – bold, italic, sizes and sub/superscript are re-applied to the text already in this panel">🔤 Restore PDF formatting</button>
+          <button id="pasteClipboard1" class="text-indigo-600 hover:text-indigo-800 font-medium">📋 Paste Clipboard</button>
+        </div>
+      </div>
+
+      <!-- Panel 2 -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition">
+        <div class="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="font-bold text-xs uppercase tracking-wider text-slate-800">2. Modified Document</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button id="clear2" class="text-xs font-medium text-slate-600 hover:text-rose-600 px-2 py-1 rounded hover:bg-slate-200 transition">Clear</button>
+            <label class="cursor-pointer inline-flex items-center space-x-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1.5 rounded-lg border border-emerald-200 transition shadow-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              <span>Open File</span>
+              <input type="file" id="fileInput2" accept=".pdf,.docx,.txt,.html,.htm" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <div id="editor2" contenteditable="true" spellcheck="false" class="rich editor-pane is-empty p-4 overflow-y-auto" data-placeholder="Paste from Word / web / PDF, drop a file here, or click 'Open File'..."></div>
+
+        <div id="pdfHint2" class="hidden bg-amber-50 border-t border-amber-200 px-4 py-2 text-xs text-amber-900 flex flex-wrap items-center gap-2">
+          <span id="pdfHintMsg2" class="flex-1 min-w-[12rem]">Plain text pasted – PDF viewers don't copy bold, italic or sizes.</span>
+          <button id="pdfHintBtn2" class="font-semibold px-2.5 py-1 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition">Restore formatting from PDF…</button>
+          <button id="pdfHintClose2" class="font-bold text-amber-700 hover:text-amber-900" title="Dismiss">✕</button>
+        </div>
+        <input type="file" id="pdfRestoreInput2" accept=".pdf" class="hidden">
+
+        <div class="bg-slate-50 px-4 py-2 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center gap-2">
+          <div class="space-x-3 whitespace-nowrap">
+            <span>Chars: <strong id="chars2" class="text-slate-700">0</strong></span>
+            <span>Words: <strong id="words2" class="text-slate-700">0</strong></span>
+          </div>
+          <button id="restorePdf2" class="text-amber-700 hover:text-amber-900 font-medium" title="Pick the PDF you copied from – bold, italic, sizes and sub/superscript are re-applied to the text already in this panel">🔤 Restore PDF formatting</button>
+          <button id="pasteClipboard2" class="text-emerald-600 hover:text-emerald-800 font-medium">📋 Paste Clipboard</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-400 -mt-3 text-center">
+      Tip: PDF viewers copy <em>plain text only</em> (no bold/italic/sizes). After pasting, click <strong>Restore PDF formatting</strong> and pick the same PDF – or use <strong>Open File</strong> / drag the PDF onto a panel.
+    </p>
+
+    <!-- Compare -->
+    <div class="flex justify-center pt-2">
+      <button id="compareBtn" class="bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-indigo-200 transition flex items-center space-x-2 text-base">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+        <span>Compare Documents &amp; Highlight Differences</span>
+      </button>
+    </div>
+
+    <!-- Diff results -->
+    <div id="resultsCard" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
+      <div class="p-5 border-b border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Visual Comparison Highlights</h2>
+          <div class="flex flex-wrap items-center gap-3 mt-1.5 text-xs">
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-rose-100 text-rose-800"><span class="w-2 h-2 rounded-full bg-rose-500 mr-1.5"></span>Removed: <strong id="statDeletions" class="ml-1">0</strong></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-emerald-100 text-emerald-800"><span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Added: <strong id="statAdditions" class="ml-1">0</strong></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800"><span class="w-2 h-2 rounded-full bg-amber-500 mr-1.5"></span>Style/Size: <strong id="statStyles" class="ml-1">0</strong></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-teal-100 text-teal-800"><span class="w-2 h-2 rounded-full bg-teal-500 mr-1.5"></span>Sub/Superscript: <strong id="statScripts" class="ml-1">0</strong></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-purple-100 text-purple-800"><span class="w-2 h-2 rounded-full bg-purple-500 mr-1.5"></span>Casing: <strong id="statCasing" class="ml-1">0</strong></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded font-medium bg-sky-100 text-sky-800"><span class="w-2 h-2 rounded-full bg-sky-500 mr-1.5"></span>Spacing/Breaks: <strong id="statSpacing" class="ml-1">0</strong></span>
+          </div>
+          <p class="text-xs text-slate-400 mt-2">Blue marks: <span class="gap-mark">·</span> space &nbsp; <span class="gap-mark">↵</span> line break &nbsp; <span class="gap-mark">→</span> tab &nbsp; <span class="gap-mark">∅</span> nothing. Click any highlight for details.</p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <div class="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 text-xs">
+            <button id="viewSplitBtn" class="px-3 py-1 font-semibold rounded-md bg-white text-slate-800 shadow-sm">Split View</button>
+            <button id="viewUnifiedBtn" class="px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900">Unified Stream</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6">
+        <div id="splitDiffContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/30">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Original Content (With Removals)</div>
+            <div id="diffLeft" class="rich diff-box"></div>
+          </div>
+          <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/30">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Revised Content (With Additions &amp; Style Highlights)</div>
+            <div id="diffRight" class="rich diff-box"></div>
+          </div>
+        </div>
+
+        <div id="unifiedDiffContainer" class="hidden border border-slate-200 rounded-xl p-4 bg-slate-50/30">
+          <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Combined In-Line Comparison</div>
+          <div id="diffUnified" class="rich diff-box"></div>
+        </div>
+      </div>
+
+      <div id="tokenInspector" class="hidden border-t border-amber-200 bg-amber-50/80 px-6 py-3.5 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2">
+          <span class="font-bold text-amber-900">Discrepancy Details:</span>
+          <span id="inspectorDescription" class="text-amber-800"></span>
+        </div>
+        <button id="inspectorDismiss" class="text-amber-700 hover:text-amber-900 font-bold">Dismiss</button>
+      </div>
+    </div>
+
+    <!-- Report -->
+    <div id="summaryReportCard" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-6 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Discrepancy Breakdown &amp; Summary Report</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Categorized analysis and elaborated explanations for each detected variance</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button id="copyReportBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition">📋 Copy Elaborated Report</button>
+          <button id="exportXlsxBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition">📊 Download Excel Report</button>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-1.5" id="filterTabs">
+          <button data-filter="all" class="filter-tab active font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white">All (<span id="countFilterAll">0</span>)</button>
+          <button data-filter="text" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Text Add/Remove (<span id="countFilterText">0</span>)</button>
+          <button data-filter="style" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Style &amp; Font Size (<span id="countFilterStyle">0</span>)</button>
+          <button data-filter="script" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Sub / Superscript (<span id="countFilterScript">0</span>)</button>
+          <button data-filter="case" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Casing Shifts (<span id="countFilterCase">0</span>)</button>
+          <button data-filter="spacing" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Spacing &amp; Line Breaks (<span id="countFilterSpacing">0</span>)</button>
+          <button data-filter="special" class="filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100">Special Chars (<span id="countFilterSpecial">0</span>)</button>
+        </div>
+        <div>
+          <input type="text" id="reportSearchInput" placeholder="Filter discrepancies..." class="px-3 py-1 border border-slate-300 rounded-md text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none">
+        </div>
+      </div>
+
+      <div id="discrepancyList" class="p-6 divide-y divide-slate-100 max-h-[500px] overflow-y-auto space-y-4"></div>
+    </div>
+
+  </main>
+
+  <script>
+  (() => {
+    'use strict';
+
+    /* =====================================================================
+       Helpers
+       ===================================================================== */
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const ptRound = (px) => Math.round(px * 0.75 * 2) / 2;          // px -> pt, snapped to 0.5pt
+    const px = (v) => parseFloat(v) || 0;
+
+    const editor1 = $('editor1'), editor2 = $('editor2');
+    const state = { activeFilter: 'all', discrepancies: [] };
+
+    const SKIP_TAGS = new Set(['head', 'style', 'script', 'meta', 'title', 'link', 'template', 'noscript', 'xml', 'colgroup', 'col', 'img', 'svg', 'canvas', 'object', 'embed', 'iframe', 'input', 'button', 'select', 'textarea']);
+    const BLOCK_TAGS = new Set(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'section', 'article', 'header', 'footer', 'aside', 'nav', 'main', 'figure', 'figcaption', 'address', 'dl', 'dt', 'dd', 'fieldset', 'form', 'center', 'caption', 'hr']);
+    const KEEP_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th']);
+    const BULLETS = new Set(['•', '◦', '▪', '▫', '●', '○', '■', '□', '‣', '⁃', '·', '∙']);
+    const SUP_MAP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n', 'ⁱ': 'i' };
+    const SUB_MAP = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')', 'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h', 'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p', 'ₛ': 's', 'ₜ': 't' };
+    const LIGATURES = { 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬀ': 'ff', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' };
+    const PUA_BULLETS = { '\uF0B7': '•', '\uF0A7': '▪', '\uF0D8': '➢', '\uF0FC': '✓', '\uF076': '❖', '\uF0A8': '◦' };
+    const mapPua = (s) => s.replace(/[\uF0B7\uF0A7\uF0D8\uF0FC\uF076\uF0A8]/g, (c) => PUA_BULLETS[c]);
+
+    function baseFontPx() { return px(getComputedStyle(editor1).fontSize) || 14; }
+
+    /* =====================================================================
+       STATS / PLACEHOLDER
+       ===================================================================== */
+    let _statsTimer = null;
+    function updateStats() {
+      [editor1, editor2].forEach((ed) => {
+        const empty = !ed.textContent.replace(/\s/g, '') && !ed.querySelector('table,hr');
+        ed.classList.toggle('is-empty', empty);
+      });
+      clearTimeout(_statsTimer);
+      _statsTimer = setTimeout(computeStats, 120);
+    }
+    function computeStats() {
+      [[editor1, 'chars1', 'words1'], [editor2, 'chars2', 'words2']].forEach(([ed, c, w]) => {
+        let chars = 0, words = 0;
+        try {
+          const arr = flattenEditor(ed);
+          let text = '';
+          arr.forEach((x) => { if (x.c !== '\uE000') { text += x.c; if (x.c !== '\n') chars++; } });
+          words = (text.match(/\S+/g) || []).length;
+        } catch (e) { /* ignore */ }
+        $(c).textContent = chars;
+        $(w).textContent = words;
+      });
+    }
+
+    /* =====================================================================
+       HTML SANITISER  (the heart of "paste exactly as it was")
+       ---------------------------------------------------------------------
+       The pasted HTML is rendered inside a hidden, script-disabled iframe so
+       the browser itself resolves classes, <style> blocks, inheritance and
+       units. We then walk that rendered tree and rebuild a CLEAN tree that
+       keeps: line breaks, paragraphs, blank lines, indentation, spacing,
+       bullets/numbering (incl. Word's fake lists), bold, italic, underline,
+       strike, sub/superscript, font sizes, alignment and tables.
+       ===================================================================== */
+    let _frame = null;
+    function getFrame() {
+      if (!_frame) {
+        _frame = document.createElement('iframe');
+        _frame.setAttribute('sandbox', 'allow-same-origin');   // no scripts can run
+        _frame.setAttribute('aria-hidden', 'true');
+        _frame.tabIndex = -1;
+        _frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:600px;border:0;visibility:hidden;pointer-events:none';
+        document.body.appendChild(_frame);
+      }
+      return _frame;
+    }
+
+    function sanitizeHtml(rawHtml) {
+      const frame = getFrame();
+      const idoc = frame.contentDocument, iwin = frame.contentWindow;
+
+      let html = String(rawHtml)
+        .replace(/<(script|iframe|object|embed|template|noscript|svg|math|video|audio|canvas)\b[\s\S]*?<\/\1\s*>/gi, '')
+        .replace(/<\/?(script|iframe|object|embed|link|img|input|source|base|form|button|textarea|select)\b[^>]*>/gi, '');
+      if (!/<!doctype/i.test(html)) html = '<!DOCTYPE html>' + html;
+
+      idoc.open(); idoc.write(html); idoc.close();
+      idoc.documentElement.style.fontSize = baseFontPx() + 'px';   // "unspecified size" == editor default
+
+      let nodes = Array.from(idoc.body ? idoc.body.childNodes : []);
+      const si = nodes.findIndex((n) => n.nodeType === 8 && /^\s*StartFragment\s*$/i.test(n.nodeValue));
+      const ei = nodes.findIndex((n) => n.nodeType === 8 && /^\s*EndFragment\s*$/i.test(n.nodeValue));
+      if (si >= 0 && ei > si) nodes = nodes.slice(si + 1, ei);
+
+      const ctx = { iwin, pending: false, pendingNode: null, atStart: true, chainOwner: null, chain: [] };
+      const out = document.createDocumentFragment();
+      const bodyCs = iwin.getComputedStyle(idoc.body);
+      nodes.forEach((n) => convertNode(n, out, bodyCs, ctx));
+
+      while (out.firstChild && out.firstChild.nodeName === 'BR') out.removeChild(out.firstChild);
+      while (out.lastChild && out.lastChild.nodeName === 'BR') out.removeChild(out.lastChild);
+
+      idoc.open(); idoc.write(''); idoc.close();                       // free memory
+      return out;
+    }
+
+    // whitespace that is pending when a block/line ends is discarded, exactly like a browser does
+    function dropPending(ctx) {
+      if (ctx.pendingNode) { ctx.pendingNode.remove(); ctx.pendingNode = null; }
+      ctx.pending = false;
+    }
+
+    function emitText(text, parent, ctx, pcs) {
+      text = text.replace(/[\u200B\uFEFF\u00AD]/g, '');
+      if (pcs.textTransform === 'uppercase') text = text.toUpperCase();
+      else if (pcs.textTransform === 'lowercase') text = text.toLowerCase();
+      const ws = pcs.whiteSpace;
+      if (ws === 'pre' || ws === 'pre-wrap' || ws === 'break-spaces') {
+        const lines = text.replace(/\r\n?/g, '\n').split('\n');
+        lines.forEach((ln, i) => {
+          if (i > 0) { parent.appendChild(document.createElement('br')); ctx.atStart = true; }
+          if (ln) { parent.appendChild(document.createTextNode(ln)); ctx.atStart = false; }
+        });
+        dropPending(ctx);
+        return;
+      }
+      // normal HTML whitespace collapsing, but non-breaking spaces survive
+      let buf = '';
+      for (const ch of text) {
+        if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f') {
+          if (!ctx.atStart) ctx.pending = true;
+        } else {
+          if (ctx.pending) {
+            if (ctx.pendingNode) ctx.pendingNode = null;      // the space was already placed before the inline element
+            else buf += ' ';
+            ctx.pending = false;
+          }
+          buf += ch;
+          ctx.atStart = false;
+        }
+      }
+      if (buf) parent.appendChild(document.createTextNode(buf));
+    }
+
+    function listTypeFromMarker(marker) {
+      const m = marker.replace(/[().]/g, '');
+      if (/^\d+$/.test(m)) return { type: '1', start: parseInt(m, 10) };
+      if (/^[a-z]$/.test(m)) return { type: m === 'i' ? 'i' : 'a', start: m === 'i' ? 1 : m.charCodeAt(0) - 96 };
+      if (/^[A-Z]$/.test(m)) return { type: m === 'I' ? 'I' : 'A', start: m === 'I' ? 1 : m.charCodeAt(0) - 64 };
+      if (/^[ivxlcdm]+$/.test(m)) return { type: 'i', start: 1 };
+      if (/^[IVXLCDM]+$/.test(m)) return { type: 'I', start: 1 };
+      return { type: '1', start: 1 };
+    }
+
+    function placeListItem(ctx, outParent, level, ordered, marker) {
+      if (ctx.chainOwner !== outParent) { ctx.chain = []; ctx.chainOwner = outParent; }
+      const chain = ctx.chain;
+      while (chain.length && chain[chain.length - 1].level > level) chain.pop();
+      const top = chain[chain.length - 1];
+      if (!top || top.level < level || top.ordered !== ordered) {
+        if (top && top.level === level) chain.pop();            // list type switched at same level
+        const list = document.createElement(ordered ? 'ol' : 'ul');
+        if (ordered) {
+          const lt = listTypeFromMarker(marker);
+          if (lt.type !== '1') list.setAttribute('type', lt.type);
+          if (lt.start !== 1) list.setAttribute('start', String(lt.start));
+        }
+        const parentEl = chain.length ? (chain[chain.length - 1].lastLi || chain[chain.length - 1].el) : outParent;
+        parentEl.appendChild(list);
+        chain.push({ level, ordered, el: list, lastLi: null });
+      }
+      const cur = chain[chain.length - 1];
+      const li = document.createElement('li');
+      cur.el.appendChild(li);
+      cur.lastLi = li;
+      return li;
+    }
+
+    function styleString(el, cs, pcs, tag, opts) {
+      const css = [];
+      const isScript = tag === 'sub' || tag === 'sup';
+      if (!isScript && cs.fontSize !== pcs.fontSize) css.push('font-size:' + (Math.round(px(cs.fontSize) * 0.75 * 100) / 100) + 'pt');
+      const w = parseInt(cs.fontWeight, 10) || 400, pw = parseInt(pcs.fontWeight, 10) || 400;
+      if ((w >= 600) !== (pw >= 600)) css.push('font-weight:' + (w >= 600 ? 700 : 400));
+      const it = cs.fontStyle !== 'normal', pit = pcs.fontStyle !== 'normal';
+      if (it !== pit) css.push('font-style:' + (it ? 'italic' : 'normal'));
+      const dec = cs.textDecorationLine || '';
+      const dparts = [];
+      if (dec.includes('underline')) dparts.push('underline');
+      if (dec.includes('line-through')) dparts.push('line-through');
+      if (dparts.length) css.push('text-decoration:' + dparts.join(' '));
+      if (opts.block) {
+        if (!opts.noMargins) {
+          const mt = px(cs.marginTop), mb = px(cs.marginBottom);
+          if (mt > 0.5) css.push('margin-top:' + Math.min(Math.round(mt), 80) + 'px');
+          if (mb > 0.5) css.push('margin-bottom:' + Math.min(Math.round(mb), 80) + 'px');
+        }
+        if (!opts.noIndent) {
+          const ml = px(cs.marginLeft) + px(cs.paddingLeft);
+          if (ml > 0.5) css.push('margin-left:' + Math.min(Math.round(ml), 600) + 'px');
+          const ti = px(cs.textIndent);
+          if (Math.abs(ti) > 0.5) css.push('text-indent:' + Math.round(ti) + 'px');
+          const ta = cs.textAlign;
+          if (ta === 'center' || ta === 'right' || ta === 'justify' || ta === 'end') css.push('text-align:' + (ta === 'end' ? 'right' : ta));
+        }
+      }
+      return css.join(';');
+    }
+
+    function convertChildren(src, dest, cs, ctx) {
+      for (const c of src.childNodes) convertNode(c, dest, cs, ctx);
+    }
+
+    function convertNode(n, outParent, pcs, ctx) {
+      if (n.nodeType === 3) { emitText(n.nodeValue, outParent, ctx, pcs); return; }
+      if (n.nodeType !== 1) return;
+
+      const tag = n.tagName.toLowerCase();
+      if (SKIP_TAGS.has(tag)) return;
+      const styleAttr = n.getAttribute('style') || '';
+      if (/mso-list\s*:\s*ignore/i.test(styleAttr) || /mso-hide\s*:\s*all/i.test(styleAttr)) return;
+      const cs = ctx.iwin.getComputedStyle(n);
+      if (cs.display === 'none') return;
+
+      if (tag === 'br') {
+        dropPending(ctx);
+        outParent.appendChild(document.createElement('br'));
+        ctx.atStart = true;
+        return;
+      }
+      if (tag === 'hr') {
+        dropPending(ctx); ctx.atStart = true; ctx.chain = []; ctx.chainOwner = null;
+        outParent.appendChild(document.createElement('hr'));
+        return;
+      }
+
+      const disp = cs.display;
+      const isCell = tag === 'td' || tag === 'th';
+      const isBlock = !isCell && (BLOCK_TAGS.has(tag) || /^(block|list-item|flex|grid|table|table-row|table-row-group|table-header-group|table-footer-group|table-caption)$/.test(disp));
+      const isList = tag === 'ul' || tag === 'ol';
+
+      // ---- Word-style fake list paragraph: <p style="mso-list:l0 level1 lfo1"> ----
+      const wm = tag === 'p' || tag === 'div' ? styleAttr.match(/mso-list\s*:\s*[^;'"]*?level(\d+)/i) : null;
+      if (wm) {
+        let marker = '';
+        n.querySelectorAll('span').forEach((sp) => {
+          if (!marker && /mso-list\s*:\s*ignore/i.test(sp.getAttribute('style') || '')) marker = sp.textContent.replace(/[\s\u00A0]/g, '');
+        });
+        const ordered = /^\(?([0-9]+|[a-zA-Z]+)[.)]$/.test(marker);
+        dropPending(ctx); ctx.atStart = true;
+        const li = placeListItem(ctx, outParent, parseInt(wm[1], 10), ordered, marker);
+        const s = styleString(li, cs, pcs, 'li', { block: true, noMargins: true, noIndent: true });
+        if (s) li.setAttribute('style', s);
+        convertChildren(n, li, cs, ctx);
+        dropPending(ctx); ctx.atStart = true;
+        return;
+      }
+
+      if (isBlock) { dropPending(ctx); ctx.atStart = true; if (tag !== 'li') { ctx.chain = []; ctx.chainOwner = null; } }
+      else if (ctx.pending && !ctx.pendingNode) {
+        // a collapsed space sits just before this inline element: place it OUTSIDE the element
+        ctx.pendingNode = document.createTextNode(' ');
+        outParent.appendChild(ctx.pendingNode);
+      }
+
+      // ---- choose output element ----
+      let el, unwrapIfPlain = false, isScriptEl = false;
+      if (KEEP_TAGS.has(tag)) {
+        el = document.createElement(tag);
+        if (tag === 'ol') {
+          if (n.getAttribute('start')) el.setAttribute('start', n.getAttribute('start'));
+          if (n.getAttribute('type')) el.setAttribute('type', n.getAttribute('type'));
+        }
+        if (isCell) {
+          if (n.getAttribute('colspan')) el.setAttribute('colspan', n.getAttribute('colspan'));
+          if (n.getAttribute('rowspan')) el.setAttribute('rowspan', n.getAttribute('rowspan'));
+        }
+      } else if (isCell) {
+        el = document.createElement(tag);
+      } else if (isBlock) {
+        el = document.createElement('div');
+      } else {
+        const va = cs.verticalAlign;
+        let script = null;
+        if (tag === 'sub' || va === 'sub') script = 'sub';
+        else if (tag === 'sup' || va === 'super') script = 'sup';
+        else if (/^-?[\d.]+(px|pt|em|%)$/.test(va)) { const v = parseFloat(va); script = v > 0 ? 'sup' : v < 0 ? 'sub' : null; }
+        if (script) { el = document.createElement(script); isScriptEl = true; }
+        else { el = document.createElement('span'); unwrapIfPlain = true; }
+      }
+
+      const s = styleString(el, cs, pcs, isScriptEl ? 'sup' : tag, {
+        block: isBlock || isCell,
+        noMargins: tag === 'li' || isCell || tag === 'tr' || tag === 'tbody' || tag === 'thead' || tag === 'tfoot',
+        noIndent: isList || tag === 'li' || isCell || tag === 'table' || tag === 'tr' || tag === 'tbody' || tag === 'thead' || tag === 'tfoot'
+      });
+      if (s) el.setAttribute('style', s);
+
+      convertChildren(n, el, cs, ctx);
+
+      if (isBlock) { dropPending(ctx); ctx.atStart = true; }
+
+      if (unwrapIfPlain && !s) {                       // plain <span> without formatting – drop wrapper
+        while (el.firstChild) outParent.appendChild(el.firstChild);
+        return;
+      }
+      if (!el.firstChild && !isCell) return;           // empty element – skip (avoids phantom blank lines)
+      outParent.appendChild(el);
+    }
+
+    /* =====================================================================
+       PLAIN-TEXT HANDLING
+       ===================================================================== */
+
+    function plainToFragment(text) {
+      let t = mapPua(String(text || '')).replace(/\r\n?/g, '\n').replace(/\f/g, '\n').replace(/[\u200B\uFEFF\u00AD]/g, '')
+        .replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '');
+      const lines = t.split('\n');
+      const frag = document.createDocumentFragment();
+      lines.forEach((ln, i) => {
+        if (i > 0) frag.appendChild(document.createElement('br'));
+        if (ln) frag.appendChild(document.createTextNode(ln));
+      });
+      return frag;
+    }
+
+    function fragmentHasContent(frag) {
+      return !!frag && (frag.textContent.replace(/[\s\u00A0]/g, '') !== '' || !!frag.querySelector('hr,table'));
+    }
+
+    function buildFragment(html, text) {
+      let frag = null;
+      if (html && html.trim()) {
+        try { frag = sanitizeHtml(html); } catch (err) { console.error('sanitize failed', err); frag = null; }
+        if (!fragmentHasContent(frag)) frag = null;
+      }
+      return frag || plainToFragment(text);
+    }
+
+    /* =====================================================================
+       INSERTION  (paste / drop / clipboard button / files)
+       ===================================================================== */
+    function insertAtCaret(editor, frag, caretRange) {
+      const sel = window.getSelection();
+      const wasEmpty = !editor.textContent.replace(/\s/g, '') && !editor.querySelector('table,hr');
+      if (wasEmpty) {
+        editor.replaceChildren(frag);
+        return;
+      }
+      let range;
+      if (caretRange && editor.contains(caretRange.startContainer)) range = caretRange;
+      else if (sel.rangeCount && editor.contains(sel.anchorNode)) range = sel.getRangeAt(0);
+      else { range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); }
+
+      // single plain paragraph pasted mid-line -> keep it inline
+      if (frag.childNodes.length === 1 && /^(P|DIV)$/.test(frag.firstChild.nodeName) &&
+          !frag.firstChild.querySelector('p,div,ul,ol,table,h1,h2,h3,h4,h5,h6,blockquote')) {
+        const inner = document.createDocumentFragment();
+        while (frag.firstChild.firstChild) inner.appendChild(frag.firstChild.firstChild);
+        frag = inner;
+      }
+      range.deleteContents();
+      const last = frag.lastChild;
+      range.insertNode(frag);
+      if (last) {
+        const r = document.createRange();
+        r.setStartAfter(last); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+      }
+      editor.normalize();
+    }
+
+    function putContent(editor, html, text, replace, caretRange) {
+      const frag = buildFragment(html, text);
+      if (replace) editor.replaceChildren(frag);
+      else insertAtCaret(editor, frag, caretRange);
+      updateStats();
+    }
+
+    function handlePaste(e, editor) {
+      e.preventDefault();
+      const cd = e.clipboardData || window.clipboardData;
+      const html = cd.getData('text/html'), text = cd.getData('text/plain');
+      putContent(editor, html, text, false);
+      if ((!html || !html.trim()) && text && text.trim().length > 15) showPdfHint(editor);
+    }
+
+    async function pasteFromClipboardButton(editor) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+          const items = await navigator.clipboard.read();
+          let html = '', text = '';
+          for (const it of items) {
+            if (it.types.includes('text/html')) html = await (await it.getType('text/html')).text();
+            if (it.types.includes('text/plain')) text = await (await it.getType('text/plain')).text();
+          }
+          if (html || text) {
+            putContent(editor, html, text, true);
+            if ((!html || !html.trim()) && text && text.trim().length > 15) showPdfHint(editor);
+            return;
+          }
+        }
+      } catch (err) { /* fall through to readText */ }
+      try {
+        const text = await navigator.clipboard.readText();
+        putContent(editor, '', text, true);
+        if (text && text.trim().length > 15) showPdfHint(editor);
+      } catch (err) {
+        alert('Clipboard access was blocked by the browser. Click inside the panel and press Ctrl+V (Cmd+V) instead.');
+      }
+    }
+
+    /* =====================================================================
+       FILE IMPORT  (PDF with real formatting / DOCX / HTML / TXT)
+       ===================================================================== */
+    // Reads a PDF and returns, per page, text lines made of styled runs (bold / italic / size / sub / sup)
+    async function pdfExtract(buf) {
+      if (!window.pdfjsLib) throw new Error('PDF.js library is not loaded.');
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pages = [];
+
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        try { await page.getOperatorList(); } catch (e) { /* fonts may not resolve – fall back to names */ }
+
+        const cache = {};
+        const fontInfo = (name) => {
+          if (cache[name]) return cache[name];
+          let real = '', bold = false, italic = false;
+          try {
+            if (page.commonObjs.has(name)) {
+              const f = page.commonObjs.get(name);
+              real = f.name || ''; bold = !!f.bold; italic = !!f.italic;
+            }
+          } catch (e) { /* ignore */ }
+          const fam = (tc.styles[name] && tc.styles[name].fontFamily) || '';
+          const s = (real + ' ' + fam).toLowerCase();
+          if (/bold|black|heavy|semibold|demibold|extrabold/.test(s)) bold = true;
+          if (/italic|oblique|slanted/.test(s)) italic = true;
+          return (cache[name] = { bold, italic });
+        };
+
+        const items = [];
+        for (const it of tc.items) {
+          if (typeof it.str !== 'string' || it.str === '') continue;
+          const t = it.transform;
+          const size = Math.hypot(t[0], t[1]) || Math.abs(t[3]) || it.height || 10;
+          items.push({ str: mapPua(it.str), x: t[4], y: t[5], w: it.width || 0, size, f: fontInfo(it.fontName) });
+        }
+
+        items.sort((a, b) => b.y - a.y || a.x - b.x);
+        const lines = [];
+        for (const it of items) {
+          const ln = lines[lines.length - 1];
+          if (ln && Math.abs(it.y - ln.y) <= 0.5 * Math.max(ln.size, it.size)) {
+            ln.items.push(it);
+            if (it.size > ln.size + 0.01) { ln.size = it.size; ln.y = it.y; }
+          } else lines.push({ y: it.y, size: it.size, items: [it] });
+        }
+
+        for (const ln of lines) {
+          ln.items.sort((a, b) => a.x - b.x);
+          ln.x0 = ln.items[0].x;
+          const runs = [];
+          let prev = null;
+          for (const it of ln.items) {
+            let sp = '';
+            if (prev) {
+              const gap = it.x - (prev.x + prev.w);
+              if (gap > ln.size * 2.5) sp = '\t';
+              else if (gap > ln.size * 0.12 && !/\s$/.test(prev.str) && !/^\s/.test(it.str)) sp = ' ';
+            }
+            let script = '';
+            if (it.size < ln.size * 0.85) {
+              const rel = (it.y - ln.y) / ln.size;
+              if (rel > 0.12) script = 'sup'; else if (rel < -0.06) script = 'sub';
+            }
+            const size = Math.round((script ? ln.size : it.size) * 2) / 2;
+            const key = [script, size, +it.f.bold, +it.f.italic].join('|');
+            const last = runs[runs.length - 1];
+            if (last && last.key === key) last.text += sp + it.str;
+            else {
+              if (sp && last) last.text += sp;
+              runs.push({ key, text: it.str, script, size, b: it.f.bold, i: it.f.italic });
+            }
+            prev = it;
+          }
+          ln.runs = runs;
+          ln.text = runs.map((r) => r.text).join('');
+        }
+        pages.push({ lines });
+      }
+      return pages;
+    }
+
+    async function pdfToHtml(buf) {
+      const pages = await pdfExtract(buf);
+      const out = [];
+
+      pages.forEach((pg, pi) => {
+        const lines = pg.lines;
+        if (!lines.length) return;
+        // left margin = most common line start
+        const freq = new Map();
+        lines.forEach((l) => { const k = Math.round(l.x0 / 2) * 2; freq.set(k, (freq.get(k) || 0) + 1); });
+        let baseX = 0, best = -1;
+        freq.forEach((v, k) => { if (v > best || (v === best && k < baseX)) { best = v; baseX = k; } });
+
+        const paras = [];
+        let prevLine = null;
+        for (const ln of lines) {
+          const indent = Math.max(0, ln.x0 - baseX);
+          const newPara = true; let mt = 0;
+          if (prevLine) {
+            const dy = prevLine.y - ln.y, ref = Math.max(prevLine.size, ln.size);
+            const extra = Math.max(0, dy - 1.25 * ref);
+            mt = extra > 0.3 * ref ? extra : 0;
+          } else if (pi > 0) mt = 18;
+          if (newPara) paras.push({ runs: ln.runs.map((r) => ({ ...r })), indent, mt });
+          else {
+            const cur = paras[paras.length - 1];
+            const last = cur.runs[cur.runs.length - 1];
+            if (/\w-$/.test(last.text) && /^[a-z]/.test(ln.runs[0].text)) last.text = last.text.slice(0, -1);
+            else last.text += ' ';
+            ln.runs.forEach((r) => cur.runs.push({ ...r }));
+          }
+          prevLine = ln;
+        }
+
+        paras.forEach((pa) => {
+          const runsHtml = pa.runs.map((r) => {
+            let h = esc(r.text).replace(/\t/g, '<span style="white-space:pre">\t</span>');
+            if (r.b) h = '<b>' + h + '</b>';
+            if (r.i) h = '<i>' + h + '</i>';
+            if (r.script) h = '<' + r.script + '>' + h + '</' + r.script + '>';
+            return '<span style="font-size:' + r.size + 'pt">' + h + '</span>';
+          }).join('');
+          const st = [];
+          if (pa.indent * 1.333 > 4) st.push('margin-left:' + Math.round(pa.indent * 1.333) + 'px');
+          if (pa.mt > 0) st.push('margin-top:' + Math.round(pa.mt * 1.333) + 'px');
+          out.push('<div' + (st.length ? ' style="' + st.join(';') + '"' : '') + '>' + runsHtml + '</div>');
+        });
+      });
+      return out.join('');
+    }
+
+    /* ---------------------------------------------------------------
+       RESTORE FORMATTING FROM PDF
+       PDF viewers copy plain text only. Here the user pastes that text,
+       then picks the same PDF: every pasted character is located in the
+       PDF's text and receives that character's bold / italic / size /
+       sub / superscript. Pasted line breaks and spacing stay untouched.
+       --------------------------------------------------------------- */
+    const normChar = (ch) => LIGATURES[ch] || PUA_BULLETS[ch] || SUP_MAP[ch] || SUB_MAP[ch] || ch;
+
+    async function restoreFormattingFromPdf(editor, file) {
+      const pages = await pdfExtract(await file.arrayBuffer());
+      const pdfChars = [];
+      pages.forEach((pg) => pg.lines.forEach((ln) => ln.runs.forEach((r) => {
+        for (const ch of r.text) {
+          if (/\s/.test(ch)) continue;
+          for (const c of normChar(ch)) pdfChars.push({ c, b: r.b, i: r.i, script: r.script, size: r.size });
+        }
+      })));
+      const pdfStr = pdfChars.map((x) => x.c).join('');
+
+      // all text nodes of the editor, with their non-space characters
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      const entries = [];                       // {c, node, off}
+      nodes.forEach((n) => {
+        const t = n.nodeValue;
+        for (let k = 0; k < t.length; k++) {
+          if (/\s/.test(t[k])) continue;
+          for (const c of normChar(t[k])) entries.push({ c, node: n, off: k });
+        }
+      });
+      const pastedStr = entries.map((e) => e.c).join('');
+      if (!pastedStr) return { matched: 0, total: 0 };
+
+      // greedy forward alignment in chunks
+      const styleAt = new Array(entries.length).fill(null);
+      let p = 0, k = 0, matched = 0;
+      while (k < pastedStr.length) {
+        let idx = -1, len = 0;
+        for (const L of [24, 12, 6]) {
+          const chunk = pastedStr.substr(k, L);
+          if (chunk.length < L && L !== 6) continue;
+          idx = pdfStr.indexOf(chunk, p);
+          if (idx >= 0) { len = chunk.length; break; }
+        }
+        if (idx < 0) { k++; continue; }
+        while (k + len < pastedStr.length && idx + len < pdfStr.length && pastedStr[k + len] === pdfStr[idx + len]) len++;
+        for (let q = 0; q < len; q++) styleAt[k + q] = pdfChars[idx + q];
+        matched += len; p = idx + len; k += len;
+      }
+
+      // style per (node, offset)
+      const byNode = new Map();
+      entries.forEach((e, i) => {
+        if (!styleAt[i]) return;
+        if (!byNode.has(e.node)) byNode.set(e.node, new Map());
+        const m = byNode.get(e.node);
+        if (!m.has(e.off)) m.set(e.off, styleAt[i]);
+      });
+      const keyOf = (st) => (st ? `${+st.b}${+st.i}${st.script}|${st.size}` : '');
+      const wrap = (text, st) => {
+        let el = document.createTextNode(text);
+        if (!st) return el;
+        if (st.i) { const w = document.createElement('i'); w.appendChild(el); el = w; }
+        if (st.b) { const w = document.createElement('b'); w.appendChild(el); el = w; }
+        if (st.script) { const w = document.createElement(st.script); w.appendChild(el); el = w; }
+        const sp = document.createElement('span');
+        sp.style.fontSize = st.size + 'pt';
+        sp.appendChild(el);
+        return sp;
+      };
+      nodes.forEach((n) => {
+        const m = byNode.get(n);
+        if (!m) return;
+        const t = n.nodeValue;
+        const sty = [];
+        for (let q = 0; q < t.length; q++) sty.push(/\s/.test(t[q]) ? undefined : (m.get(q) || null));
+        // whitespace inherits a style only when both neighbours share it
+        for (let q = 0; q < t.length; q++) {
+          if (sty[q] !== undefined) continue;
+          let a = q - 1; while (a >= 0 && sty[a] === undefined) a--;
+          let b = q + 1; while (b < t.length && sty[b] === undefined) b++;
+          const sa = a >= 0 ? sty[a] : null, sb = b < t.length ? sty[b] : null;
+          sty[q] = sa && sb && keyOf(sa) === keyOf(sb) ? sa : null;
+        }
+        const frag = document.createDocumentFragment();
+        let start = 0;
+        for (let q = 1; q <= t.length; q++) {
+          if (q === t.length || keyOf(sty[q]) !== keyOf(sty[start])) {
+            frag.appendChild(wrap(t.slice(start, q), sty[start]));
+            start = q;
+          }
+        }
+        n.parentNode.replaceChild(frag, n);
+      });
+      return { matched, total: pastedStr.length };
+    }
+
+    async function docxToHtml(buf) {
+      if (!window.mammoth) throw new Error('Mammoth (DOCX) library is not loaded.');
+      const styleMap = ['u => u', 'strike => s', "p[style-name='fx-center'] => p.fx-center:fresh", "p[style-name='fx-right'] => p.fx-right:fresh", "p[style-name='fx-justify'] => p.fx-justify:fresh"];
+      for (let hp = 2; hp <= 200; hp++) styleMap.push(`r[style-name='fsz-${hp}'] => span.fsz-${hp}`);
+      let result;
+      try {
+        const T = mammoth.transforms;
+        const runFn = (run) => run.fontSize ? { ...run, styleId: 'fsz-' + Math.round(run.fontSize * 2), styleName: 'fsz-' + Math.round(run.fontSize * 2) } : run;
+        const paraFn = (para) => {
+          if (para.styleId || para.styleName || !para.alignment) return para;
+          const m = { center: 'fx-center', right: 'fx-right', both: 'fx-justify', justify: 'fx-justify' }[para.alignment];
+          return m ? { ...para, styleId: m, styleName: m } : para;
+        };
+        result = await mammoth.convertToHtml({ arrayBuffer: buf }, { styleMap, transformDocument: (doc) => T.paragraph(paraFn)(T.run(runFn)(doc)) });
+      } catch (err) {
+        console.warn('Advanced DOCX mapping failed, using default conversion', err);
+        result = await mammoth.convertToHtml({ arrayBuffer: buf }, { styleMap: ['u => u', 'strike => s'] });
+      }
+      let css = '';
+      const used = new Set();
+      (result.value.match(/fsz-\d+/g) || []).forEach((c) => used.add(c));
+      used.forEach((c) => { css += '.' + c + '{font-size:' + (parseInt(c.slice(4), 10) / 2) + 'pt}'; });
+      css += '.fx-center{text-align:center}.fx-right{text-align:right}.fx-justify{text-align:justify}';
+      return '<style>' + css + '</style>' + result.value;
+    }
+
+    async function handleFileUpload(file, editor) {
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      try {
+        let html = '', text = '';
+        if (name.endsWith('.docx')) html = await docxToHtml(await file.arrayBuffer());
+        else if (name.endsWith('.pdf')) html = await pdfToHtml(await file.arrayBuffer());
+        else if (name.endsWith('.html') || name.endsWith('.htm')) html = await file.text();
+        else text = await file.text();
+        putContent(editor, html, text, true);
+      } catch (err) {
+        console.error(err);
+        alert('Error loading file: ' + err.message);
+      }
+    }
+
+    /* =====================================================================
+       Editor wiring
+       ===================================================================== */
+    function caretFromPoint(x, y) {
+      if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+      if (document.caretPositionFromPoint) {
+        const p = document.caretPositionFromPoint(x, y);
+        if (p) { const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); return r; }
+      }
+      return null;
+    }
+
+    function showPdfHint(editor, msg, showBtn = true) {
+      const n = editor.id.slice(-1);
+      $('pdfHintMsg' + n).textContent = msg || "Plain text pasted – PDF viewers don't copy bold, italic or sizes.";
+      $('pdfHintBtn' + n).classList.toggle('hidden', !showBtn);
+      $('pdfHint' + n).classList.remove('hidden');
+    }
+
+    function wirePdfRestore(editor) {
+      const n = editor.id.slice(-1);
+      const input = $('pdfRestoreInput' + n);
+      const open = () => input.click();
+      $('restorePdf' + n).addEventListener('click', open);
+      $('pdfHintBtn' + n).addEventListener('click', open);
+      $('pdfHintClose' + n).addEventListener('click', () => $('pdfHint' + n).classList.add('hidden'));
+      input.addEventListener('change', async (e) => {
+        const f = e.target.files[0]; e.target.value = '';
+        if (!f) return;
+        showPdfHint(editor, 'Reading PDF…', false);
+        try {
+          const r = await restoreFormattingFromPdf(editor, f);
+          updateStats();
+          const pct = r.total ? Math.round((r.matched / r.total) * 100) : 0;
+          if (!r.total) showPdfHint(editor, 'Nothing to format – paste the text first, then pick the PDF.', true);
+          else if (pct < 20) showPdfHint(editor, `Only ${pct}% of the text was found in that PDF. Make sure it is the same file you copied from (scanned PDFs have no text to read).`, true);
+          else showPdfHint(editor, `Formatting restored for ${pct}% of the text (${r.matched} of ${r.total} characters).`, true);
+        } catch (err) {
+          console.error(err);
+          showPdfHint(editor, 'Could not read the PDF: ' + err.message, true);
+        }
+      });
+    }
+
+    function bindEditor(editor, fileInput, pasteBtn, clearBtn) {
+      wirePdfRestore(editor);
+      editor.addEventListener('paste', (e) => handlePaste(e, editor));
+      editor.addEventListener('input', updateStats);
+      editor.addEventListener('dragstart', () => { editor._internalDrag = true; });
+      editor.addEventListener('dragend', () => { editor._internalDrag = false; });
+      editor.addEventListener('dragover', (e) => { if (!editor._internalDrag) { e.preventDefault(); editor.classList.add('drag'); } });
+      editor.addEventListener('dragleave', () => editor.classList.remove('drag'));
+      editor.addEventListener('drop', async (e) => {
+        editor.classList.remove('drag');
+        if (editor._internalDrag) return;                         // let the browser move text inside the editor
+        e.preventDefault();
+        const files = e.dataTransfer.files;
+        if (files && files.length) { await handleFileUpload(files[0], editor); return; }
+        putContent(editor, e.dataTransfer.getData('text/html'), e.dataTransfer.getData('text/plain'), false, caretFromPoint(e.clientX, e.clientY));
+      });
+      fileInput.addEventListener('change', async (e) => { await handleFileUpload(e.target.files[0], editor); e.target.value = ''; });
+      pasteBtn.addEventListener('click', () => pasteFromClipboardButton(editor));
+      clearBtn.addEventListener('click', () => { editor.replaceChildren(); $('pdfHint' + editor.id.slice(-1)).classList.add('hidden'); updateStats(); });
+    }
+    bindEditor(editor1, $('fileInput1'), $('pasteClipboard1'), $('clear1'));
+    bindEditor(editor2, $('fileInput2'), $('pasteClipboard2'), $('clear2'));
+
+    /* =====================================================================
+       TOKENISER  (reads the editors exactly as they are displayed)
+       ===================================================================== */
+    const STYLE_TABLE = [], STYLE_IDX = new Map();
+    function internStyle(s) {
+      const k = `${+s.b}${+s.i}${+s.u}${+s.s}${+s.sub}${+s.sup}|${s.sz}`;
+      let id = STYLE_IDX.get(k);
+      if (id === undefined) { id = STYLE_TABLE.length; STYLE_TABLE.push({ b: s.b, i: s.i, u: s.u, s: s.s, sub: s.sub, sup: s.sup, sz: s.sz }); STYLE_IDX.set(k, id); }
+      return id;
+    }
+
+    function isBlockDisplay(d) { return !!d && !/^inline/.test(d) && d !== 'contents' && d !== 'table-cell' && d !== 'none'; }
+
+    function markerFor(li) {
+      const par = li.parentElement;
+      if (par && par.tagName === 'OL') {
+        const start = parseInt(par.getAttribute('start') || '1', 10) || 1;
+        let idx = 0;
+        for (const sib of par.children) { if (sib === li) break; if (sib.tagName === 'LI') idx++; }
+        const n = start + idx, type = par.getAttribute('type') || '1';
+        const alpha = (k, up) => { let s = ''; while (k > 0) { s = String.fromCharCode(97 + ((k - 1) % 26)) + s; k = Math.floor((k - 1) / 26); } return up ? s.toUpperCase() : s; };
+        const roman = (k, up) => { const m = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]; let s = ''; m.forEach(([v, r]) => { while (k >= v) { s += r; k -= v; } }); return up ? s.toUpperCase() : s; };
+        const label = type === 'a' ? alpha(n, false) : type === 'A' ? alpha(n, true) : type === 'i' ? roman(n, false) : type === 'I' ? roman(n, true) : String(n);
+        return label + '.';
+      }
+      return '•';
+    }
+
+    function flattenEditor(root) {
+      const chars = [];
+      let atStart = true;
+      const rcs = getComputedStyle(root);
+      const baseStyle = { b: (parseInt(rcs.fontWeight, 10) || 400) >= 600, i: rcs.fontStyle !== 'normal', u: false, s: false, sub: false, sup: false, sz: ptRound(px(rcs.fontSize)) };
+
+      const push = (c, sid, m) => { chars.push(m === undefined ? { c, s: sid } : { c, s: sid, m }); atStart = (c === '\n'); };
+
+      function styleFor(cs, parent, tag) {
+        const st = { ...parent };
+        st.b = (parseInt(cs.fontWeight, 10) || 400) >= 600;
+        st.i = cs.fontStyle === 'italic' || cs.fontStyle === 'oblique';
+        const dec = cs.textDecorationLine || '';
+        if (dec.includes('underline')) st.u = true;
+        if (dec.includes('line-through')) st.s = true;
+        const va = cs.verticalAlign;
+        let scr = null;
+        if (tag === 'sub' || va === 'sub') scr = 'sub';
+        else if (tag === 'sup' || va === 'super') scr = 'sup';
+        else if (/^-?[\d.]+(px|pt|em|%)$/.test(va)) { const v = parseFloat(va); scr = v > 0 ? 'sup' : v < 0 ? 'sub' : null; }
+        if (scr === 'sub') st.sub = true;
+        if (scr === 'sup') st.sup = true;
+        if (!(st.sub || st.sup)) st.sz = ptRound(px(cs.fontSize));    // sub/sup keep the surrounding size
+        return st;
+      }
+
+      function walk(node, pst) {
+        if (node.nodeType === 3) {
+          const sid = internStyle(pst);
+          const t = node.nodeValue;
+          for (let k = 0; k < t.length; k++) {
+            let ch = t[k];
+            if (ch === '\r' || ch === '\u200B' || ch === '\uFEFF' || ch === '\u00AD') continue;
+            if (ch === '\f') ch = '\n';
+            if (LIGATURES[ch]) { for (const c of LIGATURES[ch]) push(c, sid); continue; }
+            if (SUP_MAP[ch]) { push(SUP_MAP[ch], internStyle({ ...pst, sup: true })); continue; }
+            if (SUB_MAP[ch]) { push(SUB_MAP[ch], internStyle({ ...pst, sub: true })); continue; }
+            if (PUA_BULLETS[ch]) ch = PUA_BULLETS[ch];
+            push(ch, sid);
+          }
+          return;
+        }
+        if (node.nodeType !== 1) return;
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'style' || tag === 'script') return;
+        const cs = getComputedStyle(node);
+        if (cs.display === 'none') return;
+        if (tag === 'br') { push('\n', internStyle(pst)); return; }
+
+        const isCell = tag === 'td' || tag === 'th';
+        const block = !isCell && (isBlockDisplay(cs.display) || tag === 'hr');
+        const st = styleFor(cs, pst, tag);
+        const sid = internStyle(st);
+
+        if (block && !atStart) push('\n', sid);
+        if (isCell && node.previousElementSibling) push('\t', sid);
+        if (tag === 'li') { push('\uE000', sid, markerFor(node)); push(' ', sid); atStart = true; }   // text/blocks inside <li> continue on the marker's line
+        for (const c of node.childNodes) walk(c, st);
+        if (block && !atStart) push('\n', sid);
+      }
+
+      for (const c of root.childNodes) walk(c, baseStyle);
+      return chars;
+    }
+
+    const TOKEN_RE = new RegExp("(?:[\\p{L}\\p{M}\\u200C\\u200D]+|\\p{N}+(?:[.,]\\p{N}+)*)+(?:['’][\\p{L}\\p{M}]+)*|\\uE000|\\S", 'gu');
+
+    function tokenize(chars) {
+      const full = chars.map((c) => c.c).join('');
+      const toks = [];
+      let last = 0, m;
+      TOKEN_RE.lastIndex = 0;
+      while ((m = TOKEN_RE.exec(full))) {
+        const start = m.index, end = start + m[0].length;
+        const isMarker = m[0] === '\uE000';
+        const gap = full.slice(last, start);
+        let runs = [];
+        if (isMarker) runs = [{ sid: chars[start].s, text: chars[start].m }];
+        else {
+          for (let k = start; k < end; k++) {
+            const sid = chars[k].s;
+            if (runs.length && runs[runs.length - 1].sid === sid) runs[runs.length - 1].text += chars[k].c;
+            else runs.push({ sid, text: chars[k].c });
+          }
+        }
+        toks.push({
+          idx: toks.length,
+          text: isMarker ? chars[start].m : m[0],
+          kind: isMarker ? 'marker' : (/^[\p{L}\p{N}\p{M}]/u.test(m[0]) ? 'word' : 'punct'),
+          gap, runs, first: toks.length === 0
+        });
+        last = TOKEN_RE.lastIndex;
+      }
+      return toks;
+    }
+
+    /* =====================================================================
+       DIFF ENGINE
+       ===================================================================== */
+    function getOpts() {
+      return {
+        cs: $('checkCase').checked, size: $('checkFontSize').checked, fmt: $('checkFormatting').checked,
+        script: $('checkScripts').checked, spacing: $('checkSpacing').checked, lb: $('checkLineBreaks').checked
+      };
+    }
+
+    function styleKey(sid, o) {
+      const s = STYLE_TABLE[sid];
+      return (o.fmt ? `${+s.b}${+s.i}${+s.u}${+s.s}` : '') + (o.script ? `${+s.sub}${+s.sup}` : '') + (o.size && !(s.sub || s.sup) ? '@' + s.sz : '');
+    }
+    const isBulletTok = (t) => t.kind === 'marker' || BULLETS.has(t.text);
+
+    function strictKey(t, o) {
+      if (isBulletTok(t)) return 'B|' + t.text;
+      const txt = o.cs ? t.text : t.text.toLowerCase();
+      const parts = [];
+      let pk = null, pl = 0;
+      for (const r of t.runs) {
+        const kk = styleKey(r.sid, o), l = r.text.length;
+        if (kk === pk) pl += l; else { if (pk !== null) parts.push(pk + ':' + pl); pk = kk; pl = l; }
+      }
+      parts.push(pk + ':' + pl);
+      return txt + '\u0001' + parts.join(';');
+    }
+    const looseKey = (t) => (isBulletTok(t) ? 'B|' : '') + t.text.toLowerCase();
+
+    // sequence diff on integer arrays: prefix/suffix trim + LCS (+ patience anchors for huge inputs)
+    function diffSeq(A, B) {
+      const ops = [];
+      const LIMIT = 9000000;
+
+      function lcs(aLo, aHi, bLo, bHi) {
+        const n = aHi - aLo, m = bHi - bLo, W = m + 1;
+        const L = new Uint16Array((n + 1) * W);
+        for (let i = n - 1; i >= 0; i--) {
+          for (let j = m - 1; j >= 0; j--) {
+            L[i * W + j] = A[aLo + i] === B[bLo + j] ? L[(i + 1) * W + j + 1] + 1 : Math.max(L[(i + 1) * W + j], L[i * W + j + 1]);
+          }
+        }
+        let i = 0, j = 0;
+        while (i < n && j < m) {
+          if (A[aLo + i] === B[bLo + j]) { ops.push(['e', aLo + i, bLo + j]); i++; j++; }
+          else if (L[(i + 1) * W + j] >= L[i * W + j + 1]) { ops.push(['d', aLo + i, -1]); i++; }
+          else { ops.push(['i', -1, bLo + j]); j++; }
+        }
+        while (i < n) { ops.push(['d', aLo + i, -1]); i++; }
+        while (j < m) { ops.push(['i', -1, bLo + j]); j++; }
+      }
+
+      function patience(aLo, aHi, bLo, bHi) {
+        const ca = new Map(), cb = new Map();
+        for (let i = aLo; i < aHi; i++) ca.set(A[i], (ca.get(A[i]) || 0) + 1);
+        const posB = new Map();
+        for (let j = bLo; j < bHi; j++) { cb.set(B[j], (cb.get(B[j]) || 0) + 1); posB.set(B[j], j); }
+        const pairs = [];
+        for (let i = aLo; i < aHi; i++) if (ca.get(A[i]) === 1 && cb.get(A[i]) === 1) pairs.push([i, posB.get(A[i])]);
+        if (!pairs.length) return null;
+        // longest increasing subsequence on j
+        const tails = [], prevIdx = new Array(pairs.length).fill(-1);
+        for (let k = 0; k < pairs.length; k++) {
+          let lo = 0, hi = tails.length;
+          while (lo < hi) { const mid = (lo + hi) >> 1; if (pairs[tails[mid]][1] < pairs[k][1]) lo = mid + 1; else hi = mid; }
+          if (lo > 0) prevIdx[k] = tails[lo - 1];
+          tails[lo] = k;
+        }
+        const seq = [];
+        for (let k = tails[tails.length - 1]; k !== undefined && k >= 0; k = prevIdx[k]) seq.push(pairs[k]);
+        return seq.reverse();
+      }
+
+      function rec(aLo, aHi, bLo, bHi) {
+        while (aLo < aHi && bLo < bHi && A[aLo] === B[bLo]) { ops.push(['e', aLo, bLo]); aLo++; bLo++; }
+        const suffix = [];
+        while (aLo < aHi && bLo < bHi && A[aHi - 1] === B[bHi - 1]) { aHi--; bHi--; suffix.push(['e', aHi, bHi]); }
+        if (aLo === aHi) { for (let j = bLo; j < bHi; j++) ops.push(['i', -1, j]); }
+        else if (bLo === bHi) { for (let i = aLo; i < aHi; i++) ops.push(['d', i, -1]); }
+        else if ((aHi - aLo) * (bHi - bLo) <= LIMIT) lcs(aLo, aHi, bLo, bHi);
+        else {
+          const anchors = patience(aLo, aHi, bLo, bHi);
+          if (!anchors) {
+            for (let i = aLo; i < aHi; i++) ops.push(['d', i, -1]);
+            for (let j = bLo; j < bHi; j++) ops.push(['i', -1, j]);
+          } else {
+            let pa = aLo, pb = bLo;
+            anchors.forEach(([ai, bj]) => { rec(pa, ai, pb, bj); ops.push(['e', ai, bj]); pa = ai + 1; pb = bj + 1; });
+            rec(pa, aHi, pb, bHi);
+          }
+        }
+        for (let k = suffix.length - 1; k >= 0; k--) ops.push(suffix[k]);
+      }
+
+      rec(0, A.length, 0, B.length);
+      return ops;
+    }
+
+    function computeDiff(tokA, tokB, o) {
+      const dict = new Map();
+      const id = (k) => { let v = dict.get(k); if (v === undefined) { v = dict.size; dict.set(k, v); } return v; };
+      const A = tokA.map((t) => id(strictKey(t, o))), B = tokB.map((t) => id(strictKey(t, o)));
+      const raw = diffSeq(A, B);
+
+      const result = [];
+      let k = 0;
+      while (k < raw.length) {
+        if (raw[k][0] === 'e') { result.push({ type: 'equal', a: tokA[raw[k][1]], b: tokB[raw[k][2]] }); k++; continue; }
+        const dels = [], inss = [];
+        while (k < raw.length && raw[k][0] !== 'e') { (raw[k][0] === 'd' ? dels : inss).push(raw[k]); k++; }
+        if (dels.length && inss.length && dels.length * inss.length <= 4000000) {
+          const lk = new Map();
+          const lid = (s) => { let v = lk.get(s); if (v === undefined) { v = lk.size; lk.set(s, v); } return v; };
+          const DL = dels.map((d) => lid(looseKey(tokA[d[1]]))), IL = inss.map((x) => lid(looseKey(tokB[x[2]])));
+          diffSeq(DL, IL).forEach(([t, i, j]) => {
+            if (t === 'e') result.push({ type: 'modify', a: tokA[dels[i][1]], b: tokB[inss[j][2]] });
+            else if (t === 'd') result.push({ type: 'delete', a: tokA[dels[i][1]] });
+            else result.push({ type: 'insert', b: tokB[inss[j][2]] });
+          });
+        } else {
+          dels.forEach((d) => result.push({ type: 'delete', a: tokA[d[1]] }));
+          inss.forEach((x) => result.push({ type: 'insert', b: tokB[x[2]] }));
+        }
+      }
+      return result;
+    }
+
+    /* ---- whitespace between tokens ---- */
+    function gapInfo(g) {
+      g = g.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ').replace(/\t/g, '    ');
+      const nl = (g.match(/\n/g) || []).length;
+      if (nl) return { nl, sp: g.slice(g.lastIndexOf('\n') + 1) };
+      return { nl: 0, sp: g };
+    }
+
+    function annotateGaps(ops, tokA, tokB, o) {
+      ops.forEach((op) => {
+        op.gd = null;
+        if (!op.a || !op.b || op.a.first || op.b.first) return;
+        const A = gapInfo(op.a.gap), B = gapInfo(op.b.gap);
+        const pa = tokA[op.a.idx - 1], pb = tokB[op.b.idx - 1];
+        const afterBullet = (pa && isBulletTok(pa)) || (pb && isBulletTok(pb));
+        const gd = { lb: false, sp: false };
+        if (o.lb && A.nl !== B.nl) gd.lb = true;
+        if (o.spacing && A.nl === B.nl && A.sp !== B.sp && !afterBullet) gd.sp = true;
+        if (gd.lb || gd.sp) op.gd = gd;
+      });
+    }
+
+    /* ---- describing changes ---- */
+    function expandAttr(tok, attr) {
+      const arr = [];
+      tok.runs.forEach((r) => { const v = +STYLE_TABLE[r.sid][attr]; for (let i = 0; i < r.text.length; i++) arr.push(v); });
+      return arr;
+    }
+    function describeModify(a, b, o) {
+      const fmtParts = [], scriptParts = [], keyParts = [];
+      const caseChanged = a.text !== b.text;
+      const attrDiff = (k, label, into) => {
+        const x = expandAttr(a, k), y = expandAttr(b, k);
+        if (x.length !== y.length || x.some((v, i) => v !== y[i])) {
+          const sx = x.reduce((p, c) => p + c, 0), sy = y.reduce((p, c) => p + c, 0);
+          const dir = sy > sx ? 'added' : sy < sx ? 'removed' : 'changed (different characters affected)';
+          into.push(`${label} ${dir}.`); keyParts.push(label + dir);
+        }
+      };
+      if (o.fmt) [['b', 'Bold'], ['i', 'Italic'], ['u', 'Underline'], ['s', 'Strikethrough']].forEach(([k, l]) => attrDiff(k, l, fmtParts));
+      if (o.size) {
+        const sizesOf = (t) => [...new Set(t.runs.filter((r) => !(STYLE_TABLE[r.sid].sub || STYLE_TABLE[r.sid].sup)).map((r) => STYLE_TABLE[r.sid].sz))];
+        const sa = sizesOf(a), sb = sizesOf(b);
+        if (sa.length && sb.length && sa.join() !== sb.join()) { fmtParts.push(`Font size changed from ${sa.join('/')}pt to ${sb.join('/')}pt.`); keyParts.push('size' + sa.join() + '>' + sb.join()); }
+      }
+      if (o.script) [['sup', 'Superscript'], ['sub', 'Subscript']].forEach(([k, l]) => attrDiff(k, l, scriptParts));
+      const styleChanged = fmtParts.length > 0, scriptChanged = scriptParts.length > 0;
+      const text = [];
+      if (caseChanged) { text.push(`Casing shift: '${a.text}' was modified to '${b.text}'.`); keyParts.push('case'); }
+      return {
+        caseChanged, styleChanged, scriptChanged,
+        caseText: text.join(' '), styleText: fmtParts.join(' '), scriptText: scriptParts.join(' '),
+        explanation: text.concat(fmtParts, scriptParts).join(' '), key: keyParts.join('|')
+      };
+    }
+
+    function describeGap(op, o) {
+      const A = gapInfo(op.a.gap), B = gapInfo(op.b.gap), t = op.b.text;
+      const lbl = (s) => (s === '' ? 'no space' : /^ +$/.test(s) ? `${s.length} space${s.length > 1 ? 's' : ''}` : `'${s.replace(/ /g, '·')}'`);
+      if (op.gd.lb) {
+        if (A.nl === 0 && B.nl > 0) return `A line break was added before "${t}" in the Modified Document (it continues on the same line in the Original).`;
+        if (A.nl > 0 && B.nl === 0) return `The line break before "${t}" in the Original Document is missing in the Modified Document (text runs on the same line).`;
+        return `The number of line breaks before "${t}" changed from ${A.nl} to ${B.nl}.`;
+      }
+      if (A.nl > 0) return `Indentation before "${t}" differs: ${lbl(A.sp)} in the Original vs ${lbl(B.sp)} in the Modified Document.`;
+      return `Spacing before "${t}" differs: ${lbl(A.sp)} in the Original vs ${lbl(B.sp)} in the Modified Document.`;
+    }
+
+    /* ---- report ---- */
+    function buildReport(ops, o) {
+      const entries = [];
+      const stats = { del: 0, ins: 0, style: 0, scr: 0, cas: 0, gap: 0 };
+      const word = (op) => (op.b || op.a).text;
+      const context = (s, e) => {
+        const from = Math.max(0, s - 3), to = Math.min(ops.length, e + 4);
+        const bits = [];
+        for (let i = from; i < to; i++) {
+          if (i === s) bits.push('[');
+          bits.push(word(ops[i]));
+          if (i === e) bits.push(']');
+        }
+        return bits.join(' ').replace(/\[ /g, '[').replace(/ \]/g, ']');
+      };
+      const preview = (list) => { const w = list.slice(0, 14); return w.join(' ') + (list.length > 14 ? ' …' : ''); };
+      const gapEntry = (op, i) => {
+        if (!op.gd) return;
+        stats.gap++;
+        entries.push({
+          category: 'spacing', type: 'spacing', categoryLabel: op.gd.lb ? 'Line Break Difference' : 'Spacing Difference',
+          token: op.b.text, context: context(i, i), badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+          explanation: describeGap(op, o)
+        });
+      };
+
+      let i = 0;
+      while (i < ops.length) {
+        const op = ops[i];
+        if (op.type === 'equal') { gapEntry(op, i); i++; continue; }
+
+        if (op.type === 'delete' || op.type === 'insert') {
+          let j = i;
+          while (j < ops.length && ops[j].type === op.type) j++;
+          const toks = ops.slice(i, j).map((x) => (x.a || x.b));
+          const words = toks.map((t) => t.text);
+          const allPunct = toks.every((t) => t.kind !== 'word');
+          const isDel = op.type === 'delete';
+          if (isDel) stats.del++; else stats.ins++;
+          const unit = toks.length > 1 ? `The text "${words.join(' ')}"` : `The ${allPunct ? 'character' : 'word'} "${words[0]}"`;
+          entries.push({
+            category: allPunct ? 'special' : 'text', type: op.type,
+            categoryLabel: isDel ? 'Text Removed' : 'Text Added', token: preview(words), context: context(i, j - 1),
+            badgeClass: isDel ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            explanation: isDel ? `${unit} was present in the Original Document but was removed in the Modified Document.` : `${unit} is newly added in the Modified Document.`
+          });
+          i = j; continue;
+        }
+
+        // modify
+        const d0 = describeModify(op.a, op.b, o);
+        let j = i + 1;
+        while (j < ops.length && ops[j].type === 'modify' && describeModify(ops[j].a, ops[j].b, o).key === d0.key) j++;
+        const group = ops.slice(i, j);
+        for (let g = i; g < j; g++) gapEntry(ops[g], g);
+        const allPunct = group.every((x) => x.b.kind !== 'word');
+        const ctxText = context(i, j - 1);
+        // a casing change and a style change are logged as two separate entries,
+        // so every counter and every filter tab shows exactly what it says
+        if (d0.caseChanged) {
+          stats.cas++;
+          entries.push({
+            category: allPunct ? 'special' : 'case', type: 'modify', categoryLabel: 'Casing Change',
+            token: group.slice(0, 8).map((x) => `${x.a.text} ➔ ${x.b.text}`).join(', ') + (group.length > 8 ? ' …' : ''), context: ctxText,
+            badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+            explanation: group.length > 1
+              ? `${group.length} consecutive words changed case (for example '${group[0].a.text}' became '${group[0].b.text}').`
+              : d0.caseText
+          });
+        }
+        if (d0.styleChanged) {
+          stats.style++;
+          entries.push({
+            category: allPunct ? 'special' : 'style', type: 'modify', categoryLabel: 'Style Mutation',
+            token: preview(group.map((x) => x.b.text)), context: ctxText,
+            badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+            explanation: (group.length > 1 ? `${group.length} consecutive words: ` : '') + d0.styleText
+          });
+        }
+        if (d0.scriptChanged) {
+          stats.scr++;
+          entries.push({
+            category: allPunct ? 'special' : 'script', type: 'modify', categoryLabel: 'Sub/Superscript Change',
+            token: preview(group.map((x) => x.b.text)), context: ctxText,
+            badgeClass: 'bg-teal-100 text-teal-800 border-teal-200',
+            explanation: (group.length > 1 ? `${group.length} consecutive words: ` : '') + d0.scriptText
+          });
+        }
+        i = j;
+      }
+      return { entries, stats };
+    }
+
+    /* ---- rendering ---- */
+    function renderRun(r) {
+      const s = STYLE_TABLE[r.sid];
+      let h = esc(r.text);
+      if (s.u) h = '<u>' + h + '</u>';
+      if (s.s) h = '<s>' + h + '</s>';
+      if (s.i) h = '<i>' + h + '</i>';
+      if (s.b) h = '<b>' + h + '</b>';
+      if (s.sup) h = '<sup>' + h + '</sup>';
+      if (s.sub) h = '<sub>' + h + '</sub>';
+      if (s.sz !== BASE_PT && !(s.sub || s.sup)) h = `<span style="font-size:${s.sz}pt">${h}</span>`;
+      return h;
+    }
+    let BASE_PT = 10.5;
+    const renderTok = (t) => (t.kind === 'marker' ? esc(t.text) : t.runs.map(renderRun).join(''));
+    const wrapTok = (t, cls, msg) => `<span class="${cls}" data-msg="${esc(msg)}">${renderTok(t)}</span>`;
+
+    function renderGap(tok, gd) {
+      if (tok.first) return '';
+      const g = tok.gap;
+      if (!gd) return esc(g);
+      if (!g) return '<span class="gap-mark" data-msg="Nothing here (a space/line break is expected by the other document)">∅</span>';
+      let out = '';
+      for (const ch of g) {
+        if (ch === '\n') out += '<span class="gap-mark" data-msg="Line break">↵</span>\n';
+        else if (ch === ' ' || ch === '\u00A0') out += '<span class="gap-mark" data-msg="Space">·</span>';
+        else if (ch === '\t') out += '<span class="gap-mark" data-msg="Tab">→</span>\t';
+        else out += esc(ch);
+      }
+      return out;
+    }
+
+    function renderDiffs(ops, o) {
+      let L = '', R = '', U = '', startedU = false;
+      ops.forEach((op) => {
+        if (op.type === 'equal') {
+          const gd = op.gd, msg = gd ? describeGap(op, o) : '';
+          const tagGap = (tok) => (gd ? renderGap(tok, gd) : renderGap(tok, null));
+          L += tagGap(op.a) + renderTok(op.a);
+          R += tagGap(op.b) + renderTok(op.b);
+          U += tagGap(op.b) + renderTok(op.b);
+          startedU = true;
+        } else if (op.type === 'delete') {
+          L += renderGap(op.a, null) + wrapTok(op.a, 'diff-del', `"${op.a.text}" was removed`);
+          U += (startedU ? ' ' : '') + wrapTok(op.a, 'diff-del', `"${op.a.text}" was removed`);
+          startedU = true;
+        } else if (op.type === 'insert') {
+          R += renderGap(op.b, null) + wrapTok(op.b, 'diff-ins', `"${op.b.text}" was added`);
+          U += renderGap(op.b, null) + wrapTok(op.b, 'diff-ins', `"${op.b.text}" was added`);
+          startedU = true;
+        } else {
+          const d = describeModify(op.a, op.b, o);
+          const cls = d.caseChanged ? 'diff-case' : (d.styleChanged ? 'diff-style' : 'diff-script');
+          L += renderGap(op.a, null) + wrapTok(op.a, cls, d.explanation);
+          R += renderGap(op.b, null) + wrapTok(op.b, cls, d.explanation);
+          U += renderGap(op.b, null) + wrapTok(op.a, 'diff-del', `"${op.a.text}" was replaced`) + wrapTok(op.b, cls, d.explanation);
+          startedU = true;
+        }
+      });
+      $('diffLeft').innerHTML = L;
+      $('diffRight').innerHTML = R;
+      $('diffUnified').innerHTML = U;
+    }
+
+    function renderDiscrepancyList() {
+      const list = $('discrepancyList');
+      const query = $('reportSearchInput').value.toLowerCase();
+      list.innerHTML = '';
+      const filtered = state.discrepancies.filter((it) => {
+        const tab = state.activeFilter === 'all' || it.category === state.activeFilter;
+        const q = !query || it.token.toLowerCase().includes(query) || it.explanation.toLowerCase().includes(query) || it.context.toLowerCase().includes(query);
+        return tab && q;
+      });
+      if (!filtered.length) {
+        list.innerHTML = `<div class="py-12 text-center text-slate-400"><p class="font-medium text-sm">No discrepancies found matching your criteria</p></div>`;
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      filtered.forEach((it) => {
+        const div = document.createElement('div');
+        div.className = 'pt-4 first:pt-0';
+        div.innerHTML = `
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs px-2 py-0.5 rounded-full border font-bold ${it.badgeClass}">${esc(it.categoryLabel)}</span>
+              <span class="font-mono text-sm font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">${esc(it.token)}</span>
+            </div>
+            <p class="text-sm text-slate-700 font-medium">${esc(it.explanation)}</p>
+            <p class="text-xs text-slate-500 font-mono bg-slate-50 p-2 rounded border border-slate-100 mt-1">Context: <span class="text-slate-700">${esc(it.context)}</span></p>
+          </div>`;
+        frag.appendChild(div);
+      });
+      list.appendChild(frag);
+    }
+
+    /* ---- compare ---- */
+    $('compareBtn').addEventListener('click', () => {
+      const o = getOpts();
+      BASE_PT = ptRound(baseFontPx());
+      const tokA = tokenize(flattenEditor(editor1));
+      const tokB = tokenize(flattenEditor(editor2));
+      if (!tokA.length && !tokB.length) { alert('Please enter or upload content to both panels.'); return; }
+
+      const ops = computeDiff(tokA, tokB, o);
+      annotateGaps(ops, tokA, tokB, o);
+      renderDiffs(ops, o);
+
+      const { entries, stats } = buildReport(ops, o);
+      state.discrepancies = entries;
+      state.lastRun = {
+        time: new Date(), opts: o,
+        wordsA: tokA.filter((t) => t.kind === 'word').length,
+        wordsB: tokB.filter((t) => t.kind === 'word').length
+      };
+      $('statDeletions').textContent = stats.del;
+      $('statAdditions').textContent = stats.ins;
+      $('statStyles').textContent = stats.style;
+      $('statScripts').textContent = stats.scr;
+      $('statCasing').textContent = stats.cas;
+      $('statSpacing').textContent = stats.gap;
+      const cnt = (c) => entries.filter((d) => d.category === c).length;
+      $('countFilterAll').textContent = entries.length;
+      $('countFilterText').textContent = cnt('text');
+      $('countFilterStyle').textContent = cnt('style');
+      $('countFilterScript').textContent = cnt('script');
+      $('countFilterCase').textContent = cnt('case');
+      $('countFilterSpacing').textContent = cnt('spacing');
+      $('countFilterSpecial').textContent = cnt('special');
+      renderDiscrepancyList();
+
+      $('resultsCard').classList.remove('hidden');
+      $('summaryReportCard').classList.remove('hidden');
+      $('resultsCard').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    $('resultsCard').addEventListener('click', (e) => {
+      const el = e.target.closest('[data-msg]');
+      if (!el) return;
+      $('inspectorDescription').textContent = el.getAttribute('data-msg');
+      $('tokenInspector').classList.remove('hidden');
+    });
+    $('inspectorDismiss').addEventListener('click', () => $('tokenInspector').classList.add('hidden'));
+
+    document.querySelectorAll('.filter-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tab').forEach((t) => { t.className = 'filter-tab font-medium px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100'; });
+        tab.className = 'filter-tab active font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white';
+        state.activeFilter = tab.getAttribute('data-filter');
+        renderDiscrepancyList();
+      });
+    });
+    $('reportSearchInput').addEventListener('input', renderDiscrepancyList);
+
+    $('viewSplitBtn').addEventListener('click', () => {
+      $('splitDiffContainer').classList.remove('hidden'); $('unifiedDiffContainer').classList.add('hidden');
+      $('viewSplitBtn').className = 'px-3 py-1 font-semibold rounded-md bg-white text-slate-800 shadow-sm';
+      $('viewUnifiedBtn').className = 'px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900';
+    });
+    $('viewUnifiedBtn').addEventListener('click', () => {
+      $('splitDiffContainer').classList.add('hidden'); $('unifiedDiffContainer').classList.remove('hidden');
+      $('viewUnifiedBtn').className = 'px-3 py-1 font-semibold rounded-md bg-white text-slate-800 shadow-sm';
+      $('viewSplitBtn').className = 'px-3 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900';
+    });
+
+    /* ---- sample / clear / export ---- */
+    $('loadSampleBtn').addEventListener('click', () => {
+      editor1.replaceChildren(sanitizeHtml(
+        '<div style="font-size:20pt;font-weight:bold">ANNUAL AUDIT REPORT 2026</div>' +
+        '<p>The company registered total gross revenue of <b>$14.2M</b> in Q3.<br>Chemical solutions evaluated were H<sub>2</sub>O and CO<sub>2</sub>.</p>' +
+        '<p style="margin-top:8px">Key findings:</p>' +
+        '<ul><li>Revenue grew by 12<sup>th</sup> percentile</li><li>Costs were <i>stable</i></li></ul>'));
+      editor2.replaceChildren(sanitizeHtml(
+        '<div style="font-size:16pt;font-weight:normal">Annual Audit Report 2026</div>' +
+        '<p>The company registered total net revenue of <b>$14.2M</b> in Q3. Chemical solutions evaluated were H<sub>2</sub>O and CO<sub>2</sub> at standard temperature.</p>' +
+        '<p style="margin-top:8px">Key findings:</p>' +
+        '<ul><li>Revenue grew by 12<sup>th</sup> percentile</li><li>Costs were stable</li></ul>'));
+      updateStats();
+    });
+
+    $('clearAllBtn').addEventListener('click', () => {
+      editor1.replaceChildren(); editor2.replaceChildren();
+      $('resultsCard').classList.add('hidden'); $('summaryReportCard').classList.add('hidden');
+      updateStats();
+    });
+
+    $('copyReportBtn').addEventListener('click', () => {
+      if (!state.discrepancies.length) return;
+      let text = 'DOCUMENT COMPARISON AUDIT REPORT\n===================================\n\n';
+      state.discrepancies.forEach((d, idx) => { text += `${idx + 1}. [${d.categoryLabel.toUpperCase()}] ${d.token}\n   Detail: ${d.explanation}\n   Context: ${d.context}\n\n`; });
+      navigator.clipboard.writeText(text).then(() => alert('Elaborated report copied to clipboard!'));
+    });
+
+    /* =====================================================================
+       EXCEL REPORT  (.xlsx written directly – no library, works offline)
+       An .xlsx file is a ZIP of XML parts; a small "store" ZIP writer plus
+       hand-written SpreadsheetML gives a fully styled workbook.
+       ===================================================================== */
+    const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+    function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+    function zipStore(files) {
+      const enc = new TextEncoder();
+      const d = new Date();
+      const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+      const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+      const parts = [], central = [];
+      let offset = 0;
+      files.forEach((f) => {
+        const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+        const lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+        lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+        lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+        parts.push(new Uint8Array(lh.buffer), name, data);
+        const ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+        ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+        ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+        ch.setUint32(42, offset, true);
+        central.push(new Uint8Array(ch.buffer), name);
+        offset += 30 + name.length + data.length;
+      });
+      const cdSize = central.reduce((n, a) => n + a.length, 0);
+      const end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+      end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+      return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+
+    const xmlEsc = (v) => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const colName = (n) => { let s = ''; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+
+    // ---- style table ----
+    const XL_FILLS = { head: '1E1B4B', rose: 'FEE2E2', emerald: 'DCFCE7', amber: 'FEF3C7', purple: 'F3E8FF', sky: 'E0F2FE', teal: 'CCFBF1', grey: 'F1F5F9', pale: 'EEF2FF' };
+    const XL_FILL_ORDER = Object.keys(XL_FILLS);
+    const XL_STYLES = [
+      { n: 'default' },
+      { n: 'title', font: 3 },
+      { n: 'note', font: 4 },
+      { n: 'head', font: 2, fill: 'head', border: 1, h: 'center', v: 'center', wrap: 1 },
+      { n: 'cell', border: 1, v: 'top', wrap: 1 },
+      { n: 'cellc', border: 1, v: 'top', h: 'center' },
+      { n: 'label', font: 1, fill: 'pale', border: 1, v: 'center' },
+      { n: 'value', border: 1, v: 'center', h: 'left', wrap: 1 },
+      { n: 'section', font: 1, fill: 'pale', border: 1, v: 'center' },
+      ...['rose', 'emerald', 'amber', 'purple', 'sky', 'teal', 'grey'].map((f) => ({ n: 'cat_' + f, font: 1, fill: f, border: 1, v: 'top', wrap: 1 })),
+      ...['rose', 'emerald', 'amber', 'purple', 'sky', 'teal', 'grey'].map((f) => ({ n: 'num_' + f, font: 1, fill: f, border: 1, v: 'center', h: 'center' })),
+      { n: 'status', border: 1, v: 'top', h: 'center' },
+      { n: 'ok', font: 5, fill: 'emerald', border: 1, v: 'center' }
+    ];
+    const sx = (name) => XL_STYLES.findIndex((x) => x.n === name);
+
+    function stylesXml() {
+      const fonts = [
+        '<font><sz val="11"/><name val="Calibri"/></font>',
+        '<font><b/><sz val="11"/><name val="Calibri"/></font>',
+        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>',
+        '<font><b/><sz val="18"/><color rgb="FF1E1B4B"/><name val="Calibri"/></font>',
+        '<font><i/><sz val="10"/><color rgb="FF64748B"/><name val="Calibri"/></font>',
+        '<font><b/><sz val="11"/><color rgb="FF065F46"/><name val="Calibri"/></font>'
+      ];
+      const fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>']
+        .concat(XL_FILL_ORDER.map((k) => `<fill><patternFill patternType="solid"><fgColor rgb="FF${XL_FILLS[k]}"/><bgColor indexed="64"/></patternFill></fill>`));
+      const side = (n) => `<${n} style="thin"><color rgb="FFCBD5E1"/></${n}>`;
+      const borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>', `<border>${side('left')}${side('right')}${side('top')}${side('bottom')}<diagonal/></border>`];
+      const xfs = XL_STYLES.map((st) => {
+        const fillId = st.fill ? 2 + XL_FILL_ORDER.indexOf(st.fill) : 0;
+        const al = (st.h || st.v || st.wrap) ? `<alignment${st.h ? ` horizontal="${st.h}"` : ''}${st.v ? ` vertical="${st.v}"` : ''}${st.wrap ? ' wrapText="1"' : ''}/>` : '';
+        return `<xf numFmtId="0" fontId="${st.font || 0}" fillId="${fillId}" borderId="${st.border || 0}" xfId="0" applyFont="1" applyFill="1" applyBorder="1"${al ? ' applyAlignment="1">' + al + '</xf>' : '/>'}`;
+      });
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+        `<fonts count="${fonts.length}">${fonts.join('')}</fonts><fills count="${fills.length}">${fills.join('')}</fills><borders count="${borders.length}">${borders.join('')}</borders>` +
+        `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs>` +
+        `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+    }
+
+    // rows: array of arrays; cell = value | {v, s, n(umber)}. Returns <sheetData> xml
+    function sheetDataXml(rows, heights = {}) {
+      return '<sheetData>' + rows.map((row, r) => {
+        const cells = row.map((c, i) => {
+          if (c === null || c === undefined) return '';
+          const o = (typeof c === 'object') ? c : { v: c };
+          const ref = colName(i) + (r + 1), st = o.s ? ` s="${sx(o.s)}"` : '';
+          if (o.v === '' || o.v === null || o.v === undefined) return `<c r="${ref}"${st}/>`;
+          if (typeof o.v === 'number') return `<c r="${ref}"${st}><v>${o.v}</v></c>`;
+          return `<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(o.v)}</t></is></c>`;
+        }).join('');
+        const h = heights[r] ? ` ht="${heights[r]}" customHeight="1"` : '';
+        return `<row r="${r + 1}"${h}>${cells}</row>`;
+      }).join('') + '</sheetData>';
+    }
+
+    function buildWorkbook() {
+      const run = state.lastRun, list = state.discrepancies, o = run.opts;
+      const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+      const fillOf = (label) => ({ 'Text Removed': 'rose', 'Text Added': 'emerald', 'Style Mutation': 'amber', 'Casing Change': 'purple', 'Sub/Superscript Change': 'teal', 'Spacing Difference': 'sky', 'Line Break Difference': 'sky' }[label] || 'grey');
+      const pad = (n) => String(n).padStart(2, '0');
+      const t = run.time;
+      const stamp = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+
+      /* ---------- Sheet 1: Summary ---------- */
+      const cats = ['Text Removed', 'Text Added', 'Style Mutation', 'Sub/Superscript Change', 'Casing Change', 'Spacing Difference', 'Line Break Difference'];
+      const count = (l) => list.filter((d) => d.categoryLabel === l).length;
+      const onoff = (b) => (b ? 'On' : 'Off');
+      const sum = [
+        [{ v: 'DocCompare Pro – Comparison Report', s: 'title' }],
+        [{ v: 'Generated automatically from the on-screen comparison. Open the "Discrepancies" sheet for the full list.', s: 'note' }],
+        [],
+        [{ v: 'Report details', s: 'section' }, { v: '', s: 'section' }],
+        [{ v: 'Generated on', s: 'label' }, { v: stamp, s: 'value' }],
+        [{ v: 'Words in Original document', s: 'label' }, { v: run.wordsA, s: 'value' }],
+        [{ v: 'Words in Modified document', s: 'label' }, { v: run.wordsB, s: 'value' }],
+        [{ v: 'Total discrepancies', s: 'label' }, { v: list.length, s: 'value' }],
+        [{ v: 'Overall result', s: list.length ? 'value' : 'ok' }, null],
+        [],
+        [{ v: 'Discrepancies by category', s: 'section' }, { v: 'Count', s: 'section' }],
+        ...cats.map((c) => [{ v: c, s: 'cat_' + fillOf(c) }, { v: count(c), s: 'num_' + fillOf(c) }]),
+        [{ v: 'Total', s: 'label' }, { v: list.length, s: 'value' }],
+        [],
+        [{ v: 'Detection settings used', s: 'section' }, { v: 'Status', s: 'section' }],
+        [{ v: 'Case', s: 'label' }, { v: onoff(o.cs), s: 'value' }],
+        [{ v: 'Font size', s: 'label' }, { v: onoff(o.size), s: 'value' }],
+        [{ v: 'Bold / Italic / Underline / Strike', s: 'label' }, { v: onoff(o.fmt), s: 'value' }],
+        [{ v: 'Sub / Superscript', s: 'label' }, { v: onoff(o.script), s: 'value' }],
+        [{ v: 'Spacing', s: 'label' }, { v: onoff(o.spacing), s: 'value' }],
+        [{ v: 'Line breaks', s: 'label' }, { v: onoff(o.lb), s: 'value' }]
+      ];
+      sum[8][0] = { v: list.length ? `${list.length} discrepancies found – review required` : 'No discrepancies found – documents match for the selected checks', s: list.length ? 'value' : 'ok' };
+      sum[8][1] = { v: '', s: list.length ? 'value' : 'ok' };
+      const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ${NS}><sheetViews><sheetView workbookViewId="0" showGridLines="0" tabSelected="1"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>` +
+        `<cols><col min="1" max="1" width="44" customWidth="1"/><col min="2" max="2" width="22" customWidth="1"/></cols>` +
+        sheetDataXml(sum, { 0: 30 }) + `<mergeCells count="3"><mergeCell ref="A1:D1"/><mergeCell ref="A2:D2"/><mergeCell ref="A9:B9"/></mergeCells><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>`;
+
+      /* ---------- Sheet 2: Discrepancies ---------- */
+      const head = ['#', 'Category', 'Word(s) / Characters', 'What changed', 'Context', 'Review Status', 'Reviewer Comments'];
+      const rows = [head.map((h) => ({ v: h, s: 'head' }))];
+      list.forEach((d, i) => {
+        rows.push([
+          { v: i + 1, s: 'cellc' },
+          { v: d.categoryLabel, s: 'cat_' + fillOf(d.categoryLabel) },
+          { v: d.token, s: 'cell' },
+          { v: d.explanation, s: 'cell' },
+          { v: d.context, s: 'cell' },
+          { v: 'Open', s: 'status' },
+          { v: '', s: 'cell' }
+        ]);
+      });
+      const last = Math.max(rows.length, 2);
+      const sheet2 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ${NS}><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>` +
+        `<cols><col min="1" max="1" width="6" customWidth="1"/><col min="2" max="2" width="22" customWidth="1"/><col min="3" max="3" width="32" customWidth="1"/><col min="4" max="4" width="62" customWidth="1"/><col min="5" max="5" width="52" customWidth="1"/><col min="6" max="6" width="16" customWidth="1"/><col min="7" max="7" width="36" customWidth="1"/></cols>` +
+        sheetDataXml(rows, { 0: 24 }) + `<autoFilter ref="A1:G${last}"/>` +
+        (list.length ? `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="F2:F${last}"><formula1>"Open,Accepted,Rejected,Defect Logged"</formula1></dataValidation></dataValidations>` : '') +
+        `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+
+      const files = [
+        { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+        { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+        { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook ${NS}><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="12000"/></bookViews><sheets><sheet name="Summary" sheetId="1" r:id="rId1"/><sheet name="Discrepancies" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="1" hidden="1">Discrepancies!$A$1:$G$${last}</definedName></definedNames></workbook>` },
+        { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+        { name: 'xl/styles.xml', data: stylesXml() },
+        { name: 'xl/worksheets/sheet1.xml', data: sheet1 },
+        { name: 'xl/worksheets/sheet2.xml', data: sheet2 }
+      ];
+      return { blob: zipStore(files), stamp: stamp.replace(/[: ]/g, '-') };
+    }
+
+    $('exportXlsxBtn').addEventListener('click', () => {
+      if (!state.lastRun) { alert('Run a comparison first.'); return; }
+      const { blob, stamp } = buildWorkbook();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `DocCompare-Report-${stamp}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    updateStats();
+
+  })();
+  </script>
+</body>
+</html>
